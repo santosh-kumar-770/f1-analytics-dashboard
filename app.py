@@ -3,21 +3,21 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# -------------------------------
-# 1. Page Configuration
-# -------------------------------
+# ==========================================
+# 1. PAGE CONFIGURATION
+# ==========================================
 st.set_page_config(
     page_title="F1 Analytics Dashboard",
     page_icon="🏎️",
     layout="wide"
 )
 
-st.title("🏎️ Formula 1 Analytics Dashboard")
-st.caption("Explore Formula 1 championship data")
+st.title("🏎️ F1 Analytics Dashboard")
+st.caption("Formula 1 championship insights powered by historical data")
 
-# -------------------------------
-# 2. Fetch F1 Data
-# -------------------------------
+# ==========================================
+# 2. FETCH DRIVER STANDINGS
+# ==========================================
 @st.cache_data(ttl=3600)
 def get_standings(year):
     url = (
@@ -27,8 +27,8 @@ def get_standings(year):
 
     response = requests.get(url, timeout=20)
     response.raise_for_status()
-    data = response.json()
 
+    data = response.json()
     standings = data["MRData"]["StandingsTable"]["StandingsLists"]
 
     if not standings:
@@ -52,13 +52,13 @@ def get_standings(year):
     return pd.DataFrame(rows)
 
 
-# -------------------------------
-# 3. Sidebar Settings
-# -------------------------------
-st.sidebar.header("⚙️ Dashboard Settings")
+# ==========================================
+# 3. SIDEBAR
+# ==========================================
+st.sidebar.header("⚙️ Dashboard Controls")
 
 year = st.sidebar.selectbox(
-    "Select F1 Season",
+    "Select season",
     [2025, 2024, 2023]
 )
 
@@ -66,27 +66,27 @@ try:
     df = get_standings(year)
 
     if df.empty:
-        st.warning("No standings data found for this season.")
+        st.warning("No standings data is available for this season.")
 
     else:
-        # -------------------------------
-        # 4. Summary Metrics
-        # -------------------------------
+        # ==========================================
+        # 4. CHAMPIONSHIP SUMMARY
+        # ==========================================
         st.subheader(f"🏆 {year} Driver Championship")
 
-        col1, col2, col3 = st.columns(3)
+        first, second, third = st.columns(3)
 
         leader = df.iloc[0]
 
-        col1.metric("Championship Leader", leader["Driver"])
-        col2.metric("Leader's Points", f'{leader["Points"]:g}')
-        col3.metric("Drivers Listed", len(df))
+        first.metric("Championship Leader", leader["Driver"])
+        second.metric("Leader's Points", f'{leader["Points"]:g}')
+        third.metric("Drivers Listed", len(df))
 
         st.divider()
 
-        # -------------------------------
-        # 5. Complete Standings Table
-        # -------------------------------
+        # ==========================================
+        # 5. FULL STANDINGS TABLE
+        # ==========================================
         st.subheader("🏁 Driver Standings")
 
         st.dataframe(
@@ -97,75 +97,119 @@ try:
 
         st.divider()
 
-        # -------------------------------
-        # 6. Driver Comparison
-        # -------------------------------
-        st.subheader("📊 Driver Points Comparison")
-
-        driver_names = df["Driver"].tolist()
+        # ==========================================
+        # 6. DRIVER COMPARISON
+        # ==========================================
+        st.subheader("📊 Compare Drivers")
 
         selected_drivers = st.multiselect(
             "Choose drivers to compare",
-            options=driver_names,
-            default=driver_names[:3]
+            options=df["Driver"].tolist(),
+            default=df["Driver"].head(3).tolist()
         )
 
         if selected_drivers:
-            comparison_df = df[
+            comparison = df[
                 df["Driver"].isin(selected_drivers)
             ].sort_values("Points", ascending=False)
 
-            st.bar_chart(
-                comparison_df,
-                x="Driver",
-                y="Points",
-                horizontal=True
+            chart_tab, table_tab = st.tabs(
+                ["Points Chart", "Comparison Table"]
             )
 
-            st.dataframe(
-                comparison_df[
-                    ["Position", "Driver", "Team", "Points", "Wins"]
-                ],
-                width="stretch",
-                hide_index=True
-            )
+            with chart_tab:
+                st.bar_chart(
+                    comparison,
+                    x="Driver",
+                    y="Points",
+                    horizontal=True
+                )
+
+            with table_tab:
+                st.dataframe(
+                    comparison,
+                    width="stretch",
+                    hide_index=True
+                )
         else:
-            st.info("Select at least one driver to display the comparison.")
+            st.info("Select at least one driver to compare.")
 
         st.divider()
 
-        # -------------------------------
-        # 7. Team Filter
-        # -------------------------------
-        st.subheader("🔎 Explore Team Performance")
+        # ==========================================
+        # 7. TEAM PERFORMANCE
+        # ==========================================
+        st.subheader("🏎️ Team Performance")
+
+        team_summary = (
+            df.groupby("Team", as_index=False)
+            .agg(
+                Total_Points=("Points", "sum"),
+                Total_Wins=("Wins", "sum"),
+                Drivers=("Driver", "count")
+            )
+            .sort_values("Total_Points", ascending=False)
+        )
+
+        team_chart, team_table = st.tabs(
+            ["Team Points Chart", "Team Summary"]
+        )
+
+        with team_chart:
+            st.bar_chart(
+                team_summary,
+                x="Team",
+                y="Total_Points",
+                horizontal=True
+            )
+
+        with team_table:
+            st.dataframe(
+                team_summary,
+                width="stretch",
+                hide_index=True
+            )
+
+        st.divider()
+
+        # ==========================================
+        # 8. FILTER BY TEAM
+        # ==========================================
+        st.subheader("🔎 Explore a Team")
 
         teams = ["All Teams"] + sorted(
             df["Team"].unique().tolist()
         )
 
         selected_team = st.selectbox(
-            "Select a team",
+            "Filter drivers by team",
             teams
         )
 
         if selected_team == "All Teams":
-            team_df = df.copy()
+            filtered_df = df.copy()
         else:
-            team_df = df[df["Team"] == selected_team].copy()
+            filtered_df = df[
+                df["Team"] == selected_team
+            ]
 
         st.dataframe(
-            team_df,
+            filtered_df,
             width="stretch",
             hide_index=True
         )
 
+        # ==========================================
+        # 9. FOOTER
+        # ==========================================
         st.caption(
-            "Source: Jolpica F1 API | "
-            "Historical championship standings, not live race timing."
+            "Data source: Jolpica F1 API | "
+            "Historical championship standings, "
+            "not live race timing."
         )
 
 except requests.RequestException as error:
-    st.error(f"Unable to fetch F1 data: {error}")
+    st.error(f"Could not retrieve F1 data: {error}")
 
 except (KeyError, IndexError, ValueError) as error:
-    st.error(f"Unable to process F1 data: {error}")
+    st.error(f"Could not process the F1 data: {error}")
